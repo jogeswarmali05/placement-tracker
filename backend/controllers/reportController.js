@@ -9,6 +9,7 @@ const round = (n) => (n === null || n === undefined ? null : Math.round(n * 10) 
 const clean = (data) => {
   if (data.score === '' || data.score === null) data.score = undefined;
   if (data.hoursSpent === '') data.hoursSpent = 0;
+  if (data.endDate === '' || data.endDate === null) data.endDate = undefined; // end date is optional
   return data;
 };
 const assertSubjectOwned = async (id, userId) => {
@@ -21,13 +22,13 @@ exports.getReports = asyncHandler(async (req, res) => {
   if (subject) filter.subject = subject;
   if (status) filter.status = status;
   if (from || to) {
-    filter.date = {};
-    if (from) filter.date.$gte = new Date(from);
-    if (to) filter.date.$lte = new Date(to);
+    filter.startDate = {};
+    if (from) filter.startDate.$gte = new Date(from);
+    if (to) filter.startDate.$lte = new Date(to);
   }
   const reports = await Report.find(filter)
     .populate({ path: 'subject', select: 'name group', populate: { path: 'group', select: 'name color' } })
-    .sort('-date -createdAt')
+    .sort('-startDate -createdAt')
     .limit(500);
   res.json(reports);
 });
@@ -44,6 +45,7 @@ exports.updateReport = asyncHandler(async (req, res) => {
   const data = clean(pick(req.body, FIELDS));
   if (data.subject) await assertSubjectOwned(data.subject, req.user._id);
   Object.assign(report, data);
+  if (data.endDate === undefined && 'endDate' in req.body) report.endDate = undefined; // allow clearing the end date
   res.json(await report.save());
 });
 
@@ -64,7 +66,7 @@ exports.getAnalytics = asyncHandler(async (req, res) => {
     Subject.find({ user: userId }).populate('group', 'name color').lean(),
     Report.aggregate([
       { $match: { user: userId } },
-      { $sort: { date: 1, createdAt: 1 } },
+      { $sort: { startDate: 1, createdAt: 1 } },
       {
         $group: {
           _id: '$subject',
@@ -72,13 +74,13 @@ exports.getAnalytics = asyncHandler(async (req, res) => {
           sessions: { $sum: 1 },
           avgScore: { $avg: '$score' },
           status: { $last: '$status' },
-          lastActivity: { $max: '$date' },
+          lastActivity: { $max: { $ifNull: ['$endDate', '$startDate'] } },
         },
       },
     ]),
     Report.aggregate([
-      { $match: { user: userId, date: { $gte: since } } },
-      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } }, hours: { $sum: '$hoursSpent' } } },
+      { $match: { user: userId, startDate: { $gte: since } } },
+      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$startDate' } }, hours: { $sum: '$hoursSpent' } } },
     ]),
   ]);
 
