@@ -88,5 +88,11 @@ export const Field = ({ label, children }) => (
 
 export const confirmDelete = (what) => window.confirm(`Delete ${what}? This cannot be undone.`);
 export const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
-export const toInputDate = (d) => new Date(d || Date.now()).toISOString().slice(0, 10);
+export const fmtDay = (d) =>
+  d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—';
+export const toInputDate = (d) => {
+  if (d) return new Date(d).toISOString().slice(0, 10);
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+};
 export const GROUP_COLORS = ['#0f766e', '#2563eb', '#d97706', '#be123c', '#7c3aed', '#0891b2', '#4d7c0f'];
