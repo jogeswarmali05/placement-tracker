@@ -9,6 +9,8 @@ const reportSchema = new mongoose.Schema(
     score: { type: Number, min: [0, 'Score must be 0-100'], max: [100, 'Score must be 0-100'] },
     hoursSpent: { type: Number, min: [0, 'Hours cannot be negative'], max: [24, 'Max 24 hours per entry'], default: 0 },
     remarks: { type: String, trim: true, maxlength: 500 },
+    unitName: { type: String, trim: true, maxlength: 120 },
+    topicsCovered: { type: String, trim: true, maxlength: 500 },
   },
   { timestamps: true }
 );

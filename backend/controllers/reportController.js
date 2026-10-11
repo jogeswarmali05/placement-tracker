@@ -2,7 +2,7 @@ const Report = require('../models/Report');
 const Subject = require('../models/Subject');
 const { ApiError, asyncHandler, pick } = require('../utils/helpers');
 
-const FIELDS = ['subject', 'date', 'status', 'score', 'hoursSpent', 'remarks'];
+const FIELDS = ['subject', 'unitName', 'topicsCovered', 'startDate', 'endDate', 'status', 'score', 'hoursSpent', 'remarks'];
 const STATUS_PROGRESS = { 'Not Started': 0, 'In Progress': 50, Completed: 100 };
 const round = (n) => (n === null || n === undefined ? null : Math.round(n * 10) / 10);
 
