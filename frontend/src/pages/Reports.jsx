@@ -4,35 +4,11 @@ import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, ClipboardList } from 'l
 import { reportAPI, subjectAPI, errMsg } from '../services/api.js';
 import {
   Alert, EmptyState, Field, Modal, PageHeader, ProgressBar, Spinner, StatusBadge,
-  confirmDelete, fmtDate, toInputDate,
+  confirmDelete, fmtDay, toInputDate,
 } from '../components/ui.jsx';
 
 const STATUSES = ['Not Started', 'In Progress', 'Completed'];
 const scoreColor = (s) => (s === null ? '#94a3b8' : s >= 75 ? '#059669' : s >= 60 ? '#d97706' : '#c2410c');
-
-// "HH:mm" -> minutes since midnight
-const toMinutes = (t) => {
-  if (!t) return null;
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
-};
-
-// Hours between start and end, rounded to the nearest 0.25h. Handles sessions that cross midnight.
-const calcHours = (start, end) => {
-  const s = toMinutes(start);
-  const e = toMinutes(end);
-  if (s === null || e === null) return '';
-  let diff = e - s;
-  if (diff <= 0) diff += 24 * 60;
-  return Math.round(diff / 15) / 4;
-};
-
-// "14:30" -> "2:30 PM"
-const fmtTime = (t) => {
-  if (!t) return '';
-  const [h, m] = t.split(':').map(Number);
-  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
-};
 
 function SubjectSelect({ subjects, value, onChange, allowAll, required }) {
   const byGroup = subjects.reduce((acc, s) => {
@@ -55,9 +31,9 @@ function ReportForm({ initial, subjects, defaultSubject, onSaved, onClose }) {
     subject: initial?.subject?._id || defaultSubject || '',
     unitName: initial?.unitName || '',
     topicsCovered: initial?.topicsCovered || '',
-    date: toInputDate(initial?.date),
-    startTime: initial?.startTime || '',
-    endTime: initial?.endTime || '',
+    // fallback to the old `date` field for reports saved before the migration
+    startDate: toInputDate(initial?.startDate || initial?.date),
+    endDate: initial?.endDate ? toInputDate(initial.endDate) : '',
     status: initial?.status || 'In Progress',
     score: initial?.score ?? '',
     hoursSpent: initial?.hoursSpent ?? '',
@@ -67,16 +43,9 @@ function ReportForm({ initial, subjects, defaultSubject, onSaved, onClose }) {
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
-  // When start/end change, auto-fill hours (still editable afterwards)
-  const setTime = (k) => (e) => {
-    const next = { ...form, [k]: e.target.value };
-    const hrs = calcHours(next.startTime, next.endTime);
-    if (hrs !== '') next.hoursSpent = hrs;
-    setForm(next);
-  };
-
   const submit = async (e) => {
     e.preventDefault();
+    if (form.endDate && form.endDate < form.startDate) return setError('End date cannot be before start date');
     setBusy(true); setError('');
     try {
       initial?._id ? await reportAPI.update(initial._id, form) : await reportAPI.create(form);
@@ -97,13 +66,16 @@ function ReportForm({ initial, subjects, defaultSubject, onSaved, onClose }) {
         <textarea rows={2} required maxLength={500} className="input" value={form.topicsCovered} onChange={set('topicsCovered')} placeholder="e.g. First law, entropy, Carnot cycle" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Date"><input type="date" required className="input" value={form.date} max={toInputDate()} onChange={set('date')} /></Field>
+        <Field label="Start date *">
+          <input type="date" required className="input" value={form.startDate} max={toInputDate()} onChange={set('startDate')} />
+        </Field>
+        <Field label="End date (optional)">
+          <input type="date" className="input" value={form.endDate} min={form.startDate} onChange={set('endDate')} />
+        </Field>
         <Field label="Status">
           <select className="input" value={form.status} onChange={set('status')}>{STATUSES.map((s) => <option key={s}>{s}</option>)}</select>
         </Field>
-        <Field label="Start time"><input type="time" required className="input" value={form.startTime} onChange={setTime('startTime')} /></Field>
-        <Field label="End time"><input type="time" required className="input" value={form.endTime} onChange={setTime('endTime')} /></Field>
-        <Field label="Hours spent"><input type="number" min="0" max="24" step="0.25" className="input" value={form.hoursSpent} onChange={set('hoursSpent')} /></Field>
+        <Field label="Hours spent"><input type="number" min="0" max="1000" step="0.25" className="input" value={form.hoursSpent} onChange={set('hoursSpent')} /></Field>
         <Field label="Score (0–100, optional)"><input type="number" min="0" max="100" className="input" value={form.score} onChange={set('score')} /></Field>
       </div>
       <Field label="Remarks (optional)">
@@ -163,7 +135,7 @@ function Overview({ data }) {
                     <div className="flex items-center gap-2"><div className="flex-1"><ProgressBar value={s.avgScore} color={scoreColor(s.avgScore)} label="score" /></div><span className="w-10 text-right font-semibold">{s.avgScore}%</span></div>
                   )}
                 </td>
-                <td className="px-4 py-2.5 text-slate-500">{fmtDate(s.lastActivity)}</td>
+                <td className="px-4 py-2.5 text-slate-500">{fmtDay(s.lastActivity)}</td>
               </tr>
             ))}
           </tbody>
@@ -243,18 +215,16 @@ export default function Reports() {
                 <div className="card overflow-x-auto">
                   <table className="w-full min-w-[960px] text-left text-sm">
                     <thead className="border-b border-slate-200 bg-slate-50 text-slate-600">
-                      <tr>{['Date', 'Subject', 'Unit', 'Topics covered', 'Time', 'Status', 'Score', 'Hours', 'Remarks', ''].map((h, i) => <th key={i} className="px-4 py-2.5 font-semibold">{h}</th>)}</tr>
+                      <tr>{['Start date', 'End date', 'Subject', 'Unit', 'Topics covered', 'Status', 'Score', 'Hours', 'Remarks', ''].map((h, i) => <th key={i} className="px-4 py-2.5 font-semibold">{h}</th>)}</tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {reports.map((r) => (
                         <tr key={r._id}>
-                          <td className="whitespace-nowrap px-4 py-2.5">{fmtDate(r.date)}</td>
+                          <td className="whitespace-nowrap px-4 py-2.5">{fmtDay(r.startDate || r.date)}</td>
+                          <td className="whitespace-nowrap px-4 py-2.5 text-slate-500">{fmtDay(r.endDate)}</td>
                           <td className="px-4 py-2.5 font-medium">{r.subject?.name || 'Deleted subject'}<span className="block text-xs font-normal text-slate-400">{r.subject?.group?.name}</span></td>
                           <td className="px-4 py-2.5">{r.unitName || '—'}</td>
                           <td className="max-w-[200px] truncate px-4 py-2.5 text-slate-600" title={r.topicsCovered}>{r.topicsCovered || '—'}</td>
-                          <td className="whitespace-nowrap px-4 py-2.5">
-                            {r.startTime && r.endTime ? `${fmtTime(r.startTime)} – ${fmtTime(r.endTime)}` : '—'}
-                          </td>
                           <td className="px-4 py-2.5"><StatusBadge status={r.status} /></td>
                           <td className="px-4 py-2.5">{r.score ?? '—'}</td>
                           <td className="px-4 py-2.5">{r.hoursSpent}</td>
